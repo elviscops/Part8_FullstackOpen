@@ -105,10 +105,17 @@ const typeDefs = `
         genres: [String!]!
     }
 
+    type Author {
+        name: String!
+        born: Int
+        bookCount: Int!
+    }
+
     type Query {
         bookCount: Int!
         authorCount: Int!
         allBooks: [Book!]!
+        allAuthors: [Author!]!
     }
 `
 
@@ -123,7 +130,14 @@ const resolvers = {
         published: book.published,
         genres: book.genres
       }
+    }),
+    allAuthors: () => authors.map(author => {
+      return {
+        name: author.name,
+        bookCount: books.filter(book => book.author === author.name).length
+      }
     })
+
   }
 }
 
@@ -213,6 +227,34 @@ startStandaloneServer(server, {
 //           "revolution"
 //         ],
 //         "author": "Fyodor Dostoevsky"
+//       }
+//     ]
+//   }
+// }
+// 8.3 Exercise 3:
+// Returned:
+// {
+//   "data": {
+//     "allAuthors": [
+//       {
+//         "name": "Robert Martin",
+//         "bookCount": 2
+//       },
+//       {
+//         "name": "Martin Fowler",
+//         "bookCount": 1
+//       },
+//       {
+//         "name": "Fyodor Dostoevsky",
+//         "bookCount": 2
+//       },
+//       {
+//         "name": "Joshua Kerievsky",
+//         "bookCount": 1
+//       },
+//       {
+//         "name": "Sandi Metz",
+//         "bookCount": 1
 //       }
 //     ]
 //   }
