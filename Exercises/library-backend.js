@@ -99,13 +99,16 @@ let books = [
 
 const typeDefs = `
   type Query {
-    dummy: Int
-  }
+    bookCount: Int!
+    authorCount: Int!
+  
+}
 `
 
 const resolvers = {
   Query: {
-    dummy: () => 0
+    bookCount: () => books.length,
+    authorCount: () => authors.length
   }
 }
 
@@ -119,3 +122,13 @@ startStandaloneServer(server, {
 }).then(({ url }) => {
   console.log(`Server ready at ${url}`)
 })
+
+
+// 8.1 Exercise 1:
+// Returned:
+// {
+//   "data": {
+//     "bookCount": 7,
+//     "authorCount": 5
+//   }
+// }
