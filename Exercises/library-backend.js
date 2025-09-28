@@ -98,17 +98,32 @@ let books = [
 */
 
 const typeDefs = `
-  type Query {
-    bookCount: Int!
-    authorCount: Int!
-  
-}
+    type Book {
+        title: String!
+        author: String!
+        published: Int!
+        genres: [String!]!
+    }
+
+    type Query {
+        bookCount: Int!
+        authorCount: Int!
+        allBooks: [Book!]!
+    }
 `
 
 const resolvers = {
   Query: {
     bookCount: () => books.length,
-    authorCount: () => authors.length
+    authorCount: () => authors.length,
+    allBooks: () => books.map(book => {
+      return {
+        title: book.title,
+        author: book.author,
+        published: book.published,
+        genres: book.genres
+      }
+    })
   }
 }
 
@@ -130,5 +145,75 @@ startStandaloneServer(server, {
 //   "data": {
 //     "bookCount": 7,
 //     "authorCount": 5
+//   }
+// }
+// 8.2 Exercise 2:
+// Returned:
+// {{
+//   "data": {
+//     "allBooks": [
+//       {
+//         "title": "Clean Code",
+//         "published": 2008,
+//         "genres": [
+//           "refactoring"
+//         ],
+//         "author": "Robert Martin"
+//       },
+//       {
+//         "title": "Agile software development",
+//         "published": 2002,
+//         "genres": [
+//           "agile",
+//           "patterns",
+//           "design"
+//         ],
+//         "author": "Robert Martin"
+//       },
+//       {
+//         "title": "Refactoring, edition 2",
+//         "published": 2018,
+//         "genres": [
+//           "refactoring"
+//         ],
+//         "author": "Martin Fowler"
+//       },
+//       {
+//         "title": "Refactoring to patterns",
+//         "published": 2008,
+//         "genres": [
+//           "refactoring",
+//           "patterns"
+//         ],
+//         "author": "Joshua Kerievsky"
+//       },
+//       {
+//         "title": "Practical Object-Oriented Design, An Agile Primer Using Ruby",
+//         "published": 2012,
+//         "genres": [
+//           "refactoring",
+//           "design"
+//         ],
+//         "author": "Sandi Metz"
+//       },
+//       {
+//         "title": "Crime and punishment",
+//         "published": 1866,
+//         "genres": [
+//           "classic",
+//           "crime"
+//         ],
+//         "author": "Fyodor Dostoevsky"
+//       },
+//       {
+//         "title": "Demons",
+//         "published": 1872,
+//         "genres": [
+//           "classic",
+//           "revolution"
+//         ],
+//         "author": "Fyodor Dostoevsky"
+//       }
+//     ]
 //   }
 // }
