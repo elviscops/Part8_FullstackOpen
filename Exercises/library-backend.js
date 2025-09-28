@@ -114,31 +114,33 @@ const typeDefs = `
     type Query {
         bookCount: Int!
         authorCount: Int!
-        allBooks: [Book!]!
+        allBooks(author: String): [Book!]!
         allAuthors: [Author!]!
     }
 `
 
 const resolvers = {
-  Query: {
-    bookCount: () => books.length,
-    authorCount: () => authors.length,
-    allBooks: () => books.map(book => {
-      return {
-        title: book.title,
-        author: book.author,
-        published: book.published,
-        genres: book.genres
-      }
-    }),
-    allAuthors: () => authors.map(author => {
-      return {
-        name: author.name,
-        bookCount: books.filter(book => book.author === author.name).length
-      }
-    })
+    Query: {
+        bookCount: () => books.length,
+        authorCount: () => authors.length,
+        allBooks: (root, args) => {
+            if (!args.author) {
+                return books
+            } else {    
+                return books.filter(book => book.author === args.author)
+            }
+        },
 
-  }
+        
+            
+        allAuthors: () => authors.map(author => {
+            return {
+                name: author.name,
+                bookCount: books.filter(book => book.author === author.name).length
+            }
+        })
+
+    },
 }
 
 const server = new ApolloServer({
@@ -255,6 +257,20 @@ startStandaloneServer(server, {
 //       {
 //         "name": "Sandi Metz",
 //         "bookCount": 1
+//       }
+//     ]
+//   }
+// }
+// 8.4 Exercise 4:
+// Returned:
+// {{
+//   "data": {
+//     "allBooks": [
+//       {
+//         "title": "Clean Code"
+//       },
+//       {
+//         "title": "Agile software development"
 //       }
 //     ]
 //   }
