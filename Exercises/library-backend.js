@@ -280,3 +280,19 @@ startStandaloneServer(server, {
 //     ]
 //   }
 // }
+// 8.5 Exercise
+// Returned
+// {
+//   "data": {
+//     "allBooks": [
+//       {
+//         "title": "Clean Code",
+//         "author": "Robert Martin"
+//       },
+//       {
+//         "title": "Agile software development",
+//         "author": "Robert Martin"
+//       }
+//     ]
+//   }
+// }
