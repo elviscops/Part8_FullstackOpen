@@ -62,46 +62,88 @@ const resolvers = {
         bookCount: async () => Book.collection.countDocuments(),//books.length,
         authorCount: async () => Author.collection.countDocuments(),//authors.length,
         allBooks: async (root, args) => {
-            // if (args.author) {
-            //     return books.filter(book => book.author === args.author)
-            // } else if (args.genres) {
-            //     return books.filter(book => book.genres.includes(args.genres))
-            // } else if (args.genres && args.author) {
-            //     return books.filter(book => book.author === args.author && book.genres.includes(args.genres))
-            // } else {
-            //     return books
-            // }
-            return Book.find({}).populate('author')
+            const query = {}
+            if (args.author) {
+                const author = await Author.findOne({ name: args.author })
+                if (author) {
+                    query.author = author._id
+                } else {
+                    return []
+                }
+            }
+            if (args.genres) {
+                query.genres = { $in: [args.genres] }
+            }   
+            let bookList = await Book.find(query).populate('author',{ name: 1, born: 1, id: 1 })
+
+            return bookList
         },   
         allAuthors: async () => {
             return Author.find({})
+        },
+    },
+    Author: {
+        bookCount: async (root) => {
+            const count = await Book.countDocuments({ author: root._id })
+            return count
         }
-        
-        // authors.map(author => {
-        //     return {
-        //         name: author.name,
-        //         born: author.born,
-        //         bookCount: books.filter(book => book.author === author.name).length
-        //     }
-        // })
-        ,
     },
     Mutation: {
-        addBook: (root, args) => {
-            const book = {...args, id: uuid()}
-            if (!authors.find(a => a.name === args.author)) {
-                authors = authors.concat({ name: args.author, id: uuid() })
+        addBook: async (root, args) => {
+            let author = await Author.findOne({ name: args.author })
+
+            if (!author) {
+                author = new Author({ name: args.author })
+                try {
+                    await author.save()
+                } catch (error) {
+                    throw new GraphQLError('Saving author failed', {
+                        extensions: {
+                            code: 'BAD_USER_INPUT',
+                            invalidArgs: args.author,
+                            error
+                        }
+                    })
+                }
             }
-            books = books.concat(book)
+
+            const book = new Book({ ...args, author: author })
+
+            try {
+                await book.save()
+            } catch (error) {
+                throw new GraphQLError('Saving book failed', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                        invalidArgs: args.title,
+                        error
+                    }
+                })
+            }
+            
+            await book.populate('author')
             return book
         },
-        editAuthor: (root, args) => {
-            const author = authors.find(a => a.name === args.name)
-            if (!author) null
+        editAuthor: async (root, args) => {
+            const author = await Author.findOne({ name: args.name })
+            if (!author) {
+                return null
+            }
 
-            const updatedAuthor = {...author,born: args.setBornTo}
-            authors = authors.map(a => a.name === args.name ? updatedAuthor: a)
-            return updatedAuthor
+            author.born = args.setBornTo
+            
+            try {
+                await author.save()
+            } catch (error) {
+                throw new GraphQLError('Editing author failed', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                        invalidArgs: args.name,
+                        error
+                    }
+                })
+            }
+            return author
         }
     }
 }
