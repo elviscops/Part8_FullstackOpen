@@ -1,6 +1,24 @@
 const { ApolloServer } = require('@apollo/server')
 const { startStandaloneServer } = require('@apollo/server/standalone')
+const { GraphQLError } = require('graphql')
 const { v1: uuid } = require('uuid')
+
+const mongoose = require('mongoose')
+require('dotenv').config()
+
+const MONGODB_URI = process.env.MONGODB_URI
+
+console.log('connecting to', MONGODB_URI)
+
+mongoose.connect(MONGODB_URI)
+  .then(() => {
+    console.log('connected to MongoDB')
+  })
+  .catch((error) => {
+    console.log('error connection to MongoDB:', error.message)
+  })
+
+
 
 let authors = [
   {
@@ -101,9 +119,10 @@ let books = [
 const typeDefs = `
     type Book {
         title: String!
-        author: String!
         published: Int!
+        author: Author!
         genres: [String!]!
+        id: ID!
     }
 
     type Author {
@@ -119,18 +138,17 @@ const typeDefs = `
         allAuthors: [Author!]!
     }
 
+    
     type Mutation {
         addBook(
             title: String!
             author: String!
             published: Int!
             genres: [String!]!
-        ): Book
-        editAuthor(
-            name: String!
-            setBornTo: Int!
-        ): Author
+        ): Book!
+        editAuthor(name: String!, setBornTo: Int!): Author
     }
+    
 `
 
 const resolvers = {
