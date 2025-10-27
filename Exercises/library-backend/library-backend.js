@@ -2,8 +2,11 @@ const { ApolloServer } = require('@apollo/server')
 const { startStandaloneServer } = require('@apollo/server/standalone')
 const { GraphQLError } = require('graphql')
 const { v1: uuid } = require('uuid')
+const jwt = require('jsonwebtoken')
+
 const Book = require('./models/book')
 const Author = require('./models/author')
+const User = require('./models/user')
 
 const mongoose = require('mongoose')
 require('dotenv').config()
@@ -42,8 +45,18 @@ const typeDefs = `
         authorCount: Int!
         allBooks(author: String, genres: String): [Book!]!
         allAuthors: [Author!]!
+        me: User
+    }
+    
+    type User {
+        username: String!
+        favoriteGenre: String!
+        id: ID!
     }
 
+    type Token {
+        value: String!
+    }
     
     type Mutation {
         addBook(
@@ -53,14 +66,23 @@ const typeDefs = `
             genres: [String!]!
         ): Book!
         editAuthor(name: String!, setBornTo: Int!): Author
+
+        createUser(
+            username: String!
+            favoriteGenre: String!
+        ): User
+        login(
+            username: String!
+            password: String!
+        ): Token
     }
     
 `
 
 const resolvers = {
     Query: {
-        bookCount: async () => Book.collection.countDocuments(),//books.length,
-        authorCount: async () => Author.collection.countDocuments(),//authors.length,
+        bookCount: async () => Book.collection.countDocuments(),
+        authorCount: async () => Author.collection.countDocuments(),
         allBooks: async (root, args) => {
             const query = {}
             if (args.author) {
@@ -81,6 +103,9 @@ const resolvers = {
         allAuthors: async () => {
             return Author.find({})
         },
+        me: async (root, args, context) => {
+            return context.currentUser
+        }   
     },
     Author: {
         bookCount: async (root) => {
@@ -89,40 +114,49 @@ const resolvers = {
         }
     },
     Mutation: {
-        addBook: async (root, args) => {
-            let author = await Author.findOne({ name: args.author })
+        addBook: async (root, args, context) => {
+            const currentUser = context.currentUser
 
-            if (!author) {
-                author = new Author({ name: args.author })
-                try {
-                    await author.save()
-                } catch (error) {
-                    throw new GraphQLError('Saving author failed', {
-                        extensions: {
-                            code: 'BAD_USER_INPUT',
-                            invalidArgs: args.author,
-                            error
-                        }
-                    })
-                }
-            }
-
-            const book = new Book({ ...args, author: author })
-
-            try {
-                await book.save()
-            } catch (error) {
-                throw new GraphQLError('Saving book failed', {
+            if (!currentUser) {
+                throw new GraphQLError('not authenticated', {
                     extensions: {
-                        code: 'BAD_USER_INPUT',
-                        invalidArgs: args.title,
-                        error
+                        code: 'UNAUTHENTICATED',
                     }
                 })
             }
-            
-            await book.populate('author')
-            return book
+            let author;
+
+            try {
+                author = await Author.findOne({ name: args.author });
+
+                if (!author) author = new Author({ name: args.author });
+                await author.save();
+
+                const book = new Book({ ...args, author });
+                await book.save();
+
+                return book;
+            } catch (error) {
+                let errorMessage = "Saving book failed";
+
+                if (error instanceof mongoose.Error.ValidationError) {
+                console.log(error.message);
+
+                if (error.errors.hasOwnProperty("name")) {
+                    errorMessage = "Saving book failed. Author name is not valid";
+                } else if (error.errors.hasOwnProperty("title")) {
+                    errorMessage = "Saving book failed. Book title is not valid";
+                }
+                throw new GraphQLError(errorMessage, {
+                    extensions: {
+                    code: "BAD_USER_INPUT",
+                    },
+                });
+                } else {
+                console.log(error);
+                throw new GraphQLError(errorMessage);
+                }
+            }
         },
         editAuthor: async (root, args) => {
             const author = await Author.findOne({ name: args.name })
@@ -131,7 +165,7 @@ const resolvers = {
             }
 
             author.born = args.setBornTo
-            
+
             try {
                 await author.save()
             } catch (error) {
@@ -145,6 +179,49 @@ const resolvers = {
             }
             return author
         }
+,        createUser: async (root, args) => {
+            const user = new User({ ...args })
+
+            try {
+                await user.save()
+            } catch (error) {
+                throw new GraphQLError('Creating the user failed', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                        invalidArgs: args.username,
+                        error
+                    }
+                })
+            }
+
+            return user
+        },
+        login: async (root, args) => {
+            const user = await User.findOne({ username: args.username })
+
+            if (!user || args.password !== 'secret') {
+                throw new GraphQLError('Wrong credentials', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT'
+                    }
+                })
+            }
+
+            const userForToken = {
+                username: user.username,
+                id: user._id
+            }
+
+            const jwtSecret = process.env.JWT_SECRET
+            if (!jwtSecret) {
+                throw new GraphQLError('JWT_SECRET is not set on the server', {
+                    extensions: { code: 'INTERNAL_SERVER_ERROR' }
+                })
+            }
+
+            return { value: jwt.sign(userForToken, jwtSecret) }
+
+        }
     }
 }
 
@@ -155,219 +232,17 @@ const server = new ApolloServer({
 
 startStandaloneServer(server, {
   listen: { port: 4000 },
+    context: async ({ req,res }) => {
+    const auth = req ? req.headers.authorization : null
+    if (auth && auth.startsWith('Bearer ')) {
+      const token = auth.substring(7)
+      const decodedToken = jwt.verify(token, process.env.JWT_SECRET)
+      const currentUser = await User.findById(decodedToken.id)
+      console.log('current user:', currentUser)
+      return { currentUser }
+    }
+  }
 }).then(({ url }) => {
   console.log(`Server ready at ${url}`)
 })
-
-
-// 8.1 Exercise 1:
-// Returned:
-// {
-//   "data": {
-//     "bookCount": 7,
-//     "authorCount": 5
-//   }
-// }
-// 8.2 Exercise 2:
-// Returned:
-// {{
-//   "data": {
-//     "allBooks": [
-//       {
-//         "title": "Clean Code",
-//         "published": 2008,
-//         "genres": [
-//           "refactoring"
-//         ],
-//         "author": "Robert Martin"
-//       },
-//       {
-//         "title": "Agile software development",
-//         "published": 2002,
-//         "genres": [
-//           "agile",
-//           "patterns",
-//           "design"
-//         ],
-//         "author": "Robert Martin"
-//       },
-//       {
-//         "title": "Refactoring, edition 2",
-//         "published": 2018,
-//         "genres": [
-//           "refactoring"
-//         ],
-//         "author": "Martin Fowler"
-//       },
-//       {
-//         "title": "Refactoring to patterns",
-//         "published": 2008,
-//         "genres": [
-//           "refactoring",
-//           "patterns"
-//         ],
-//         "author": "Joshua Kerievsky"
-//       },
-//       {
-//         "title": "Practical Object-Oriented Design, An Agile Primer Using Ruby",
-//         "published": 2012,
-//         "genres": [
-//           "refactoring",
-//           "design"
-//         ],
-//         "author": "Sandi Metz"
-//       },
-//       {
-//         "title": "Crime and punishment",
-//         "published": 1866,
-//         "genres": [
-//           "classic",
-//           "crime"
-//         ],
-//         "author": "Fyodor Dostoevsky"
-//       },
-//       {
-//         "title": "Demons",
-//         "published": 1872,
-//         "genres": [
-//           "classic",
-//           "revolution"
-//         ],
-//         "author": "Fyodor Dostoevsky"
-//       }
-//     ]
-//   }
-// }
-// 8.3 Exercise 3:
-// Returned:
-// {
-//   "data": {
-//     "allAuthors": [
-//       {
-//         "name": "Robert Martin",
-//         "bookCount": 2
-//       },
-//       {
-//         "name": "Martin Fowler",
-//         "bookCount": 1
-//       },
-//       {
-//         "name": "Fyodor Dostoevsky",
-//         "bookCount": 2
-//       },
-//       {
-//         "name": "Joshua Kerievsky",
-//         "bookCount": 1
-//       },
-//       {
-//         "name": "Sandi Metz",
-//         "bookCount": 1
-//       }
-//     ]
-//   }
-// }
-// 8.4 Exercise 4:
-// Returned:
-// {{
-//   "data": {
-//     "allBooks": [
-//       {
-//         "title": "Clean Code"
-//       },
-//       {
-//         "title": "Agile software development"
-//       }
-//     ]
-//   }
-// }
-// 8.5 Exercise
-// Returned
-// {
-//   "data": {
-//     "allBooks": [
-//       {
-//         "title": "Clean Code",
-//         "author": "Robert Martin"
-//       },
-//       {
-//         "title": "Agile software development",
-//         "author": "Robert Martin"
-//       }
-//     ]
-//   }
-// }
-// Exercise 8.6
-// {
-//   "data": {
-//     "allAuthors": [
-//       {
-//         "name": "Robert Martin",
-//         "born": 1952,
-//         "bookCount": 2
-//       },
-//       {
-//         "name": "Martin Fowler",
-//         "born": 1963,
-//         "bookCount": 1
-//       },
-//       {
-//         "name": "Fyodor Dostoevsky",
-//         "born": 1821,
-//         "bookCount": 2
-//       },
-//       {
-//         "name": "Joshua Kerievsky",
-//         "born": null,
-//         "bookCount": 1
-//       },
-//       {
-//         "name": "Sandi Metz",
-//         "born": null,
-//         "bookCount": 1
-//       },
-//       {
-//         "name": "Reijo Mäki",
-//         "born": null,
-//         "bookCount": 1
-//       }
-//     ]
-//   }
-// }
-
-// Exercise 8.7
-// {
-//   "data": {
-//     "allAuthors": [
-//       {
-//         "name": "Robert Martin",
-//         "born": 1952,
-//         "bookCount": 2
-//       },
-//       {
-//         "name": "Martin Fowler",
-//         "born": 1963,
-//         "bookCount": 1
-//       },
-//       {
-//         "name": "Fyodor Dostoevsky",
-//         "born": 1821,
-//         "bookCount": 2
-//       },
-//       {
-//         "name": "Joshua Kerievsky",
-//         "born": null,
-//         "bookCount": 1
-//       },
-//       {
-//         "name": "Sandi Metz",
-//         "born": null,
-//         "bookCount": 1
-//       },
-//       {
-//         "name": "Reijo Mäki",
-//         "born": 1958,
-//         "bookCount": 1
-//       }
-//     ]
-//   }
-// }
+ 
