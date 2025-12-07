@@ -18,7 +18,11 @@ export const ALL_AUTHORS = gql`
 export const ALL_BOOKS = gql`
   query {
       allBooks {
-        author
+        author {
+            name,
+            born,
+            bookCount
+        }
         genres
         published
         title
@@ -27,13 +31,20 @@ export const ALL_BOOKS = gql`
 `
 
 const App = () => {
-    const resultAuthors = useQuery(ALL_AUTHORS)
-    const resultBooks = useQuery(ALL_BOOKS)
+    const resultAuthors = useQuery(ALL_AUTHORS);
+    const resultBooks = useQuery(ALL_BOOKS);
+
     const [page, setPage] = useState("authors");
 
     if (resultAuthors.loading || resultBooks.loading) {
         return <div>loading...</div>;
     }
+
+    if (resultAuthors.error || resultBooks.error) {
+        return <div>Error: {(resultAuthors.error || resultBooks.error)?.message}</div>;
+    }
+    console.log(resultAuthors);
+    console.log(resultBooks);
 
     return (
         <div>
