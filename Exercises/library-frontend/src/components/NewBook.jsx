@@ -13,7 +13,11 @@ const ADD_BOOK = gql`
             genres: $genres
         ) {
             title,
-            author,
+            author {
+                name
+                born
+                bookCount
+            }
             published,
             genres
         }
@@ -27,8 +31,15 @@ const NewBook = (props) => {
     const [genre, setGenre] = useState('')
     const [genres, setGenres] = useState([])
 
-    const [ addBook ] = useMutation(ADD_BOOK, {
-        refetchQueries: [ { query: ALL_BOOKS }, { query: ALL_AUTHORS } ],
+    const [addBook] = useMutation(ADD_BOOK, {
+        refetchQueries: [{ query: ALL_BOOKS }, { query: ALL_AUTHORS }],
+        awaitRefetchQueries: true,
+        onError: (error) => {
+            const gqlMsg = error?.graphQLErrors?.[0]?.message
+            const netMsg = error?.networkError?.message
+            console.error('addBook error:', gqlMsg || netMsg || error.message)
+            alert(gqlMsg || netMsg || 'Add book failed')
+        },
     })
 
   if (!props.show) {
@@ -38,7 +49,7 @@ const NewBook = (props) => {
   const submit = async (event) => {
     event.preventDefault()
 
-    addBook({ variables: { title, author, published: Number(published), genres } })
+    await addBook({ variables: { title, author, published: Number(published), genres } })
         
     setTitle('')
     setPublished('')

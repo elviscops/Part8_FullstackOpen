@@ -2,6 +2,7 @@ import { useState } from "react";
 import Authors from "./components/Authors";
 import Books from "./components/Books";
 import NewBook from "./components/NewBook";
+import Login from "./components/Login";
 import { gql} from '@apollo/client'
 import { useQuery } from '@apollo/client/react'
 
@@ -30,11 +31,29 @@ export const ALL_BOOKS = gql`
   }
 `
 
+export const LOGIN = gql`
+  mutation login($username: String!, $password: String!) {
+    login(username: $username, password: $password)  {
+      value
+    }
+  }
+`
+
 const App = () => {
     const resultAuthors = useQuery(ALL_AUTHORS);
     const resultBooks = useQuery(ALL_BOOKS);
-
+    const userLoggedIn = false; 
+    const client = localStorage.getItem('user-token')
+    const [token, setToken] = useState(localStorage.getItem('user-token') ?? null);
     const [page, setPage] = useState("authors");
+
+    const logout = () => {
+        setToken(null)
+        localStorage.clear("user-token")
+        client.resetStore()
+    }
+
+   
 
     if (resultAuthors.loading || resultBooks.loading) {
         return <div>loading...</div>;
@@ -43,22 +62,33 @@ const App = () => {
     if (resultAuthors.error || resultBooks.error) {
         return <div>Error: {(resultAuthors.error || resultBooks.error)?.message}</div>;
     }
-    console.log(resultAuthors);
-    console.log(resultBooks);
 
     return (
         <div>
             <div>
                 <button onClick={() => setPage("authors")}>authors</button>
                 <button onClick={() => setPage("books")}>books</button>
-                <button onClick={() => setPage("add")}>add book</button>
+                {token && <button onClick={() => setPage("add")}>add book</button>}
+                {token && <button onClick={logout}>logout</button>}
+                {!token && <button onClick={() => setPage("login")}>login</button>}
             </div>
 
-            <Authors authors={resultAuthors.data.allAuthors} show={page === "authors"} />
+            {page === "authors" && (
+                <Authors authors={resultAuthors.data.allAuthors} show={page === "authors"} />
+            )}
+            
 
-            <Books books={resultBooks.data.allBooks} show={page === "books"} />
+            {page === "books" && (
+                <Books books={resultBooks.data?.allBooks ?? []} show={page === "books"} />
+            )}
 
-            <NewBook show={page === "add"} />
+            {page === "add" && token && (
+                <NewBook show={page === "add"} />
+            )}
+            {page === "login" && (
+                <Login setToken={setToken} show={page === "login"} />
+            )}
+
         </div>
     );
 };
