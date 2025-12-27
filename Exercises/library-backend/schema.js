@@ -1,4 +1,3 @@
-
 const typeDefs = `
     type Book {
         title: String!
@@ -52,6 +51,9 @@ const typeDefs = `
         ): Token
     }
     
+    type Subscription {
+        bookAdded: Book!
+    }
 `
 
 module.exports = typeDefs

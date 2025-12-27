@@ -9,7 +9,7 @@ const Book = require('./models/book')
 const Author = require('./models/author')
 const User = require('./models/user')
 
-const {PubSub} = require('graphql-subscriptions');
+const { PubSub } = require('graphql-subscriptions');
 const pubsub = new PubSub();
 
 
@@ -36,7 +36,7 @@ const resolvers = {
             return bookList
         },   
         allAuthors: async () => {
-            return Author.find({})
+            return Author.find({}).populate('books')
         },
         me: async (root, args, context) => {
             return context.currentUser
@@ -44,14 +44,19 @@ const resolvers = {
     },
     Author: {
         bookCount: async (root) => {
-            const count = await Book.countDocuments({ author: root._id })
+            const authorFound = await Author.findOne({ name: root.name })
+            const booksFound = await Book.find({ author: authorFound.id })
+            //const count = await Book.countDocuments({ author: root._id })
+            const count = booksFound.length
             return count
         }
     },
     Mutation: {
         addBook: async (root, args, context) => {
+
+            const authorExists = await Author.findOne({ name: args.author })
             const currentUser = context.currentUser
-            console.log('current user in AddBook:', currentUser)
+            // console.log('current user in AddBook:', currentUser)
 
             if (!currentUser) {
                 throw new GraphQLError('not authenticated', {
@@ -62,37 +67,51 @@ const resolvers = {
             }
             let author;
 
+            if (!authorExists) {
+                author = new Author({ name: args.author })
+                try {
+                    await author.save()
+                } catch (error) {
+                    let errorMessage = "Saving author failed";
+
+                    if (error instanceof mongoose.Error.ValidationError) {
+                        console.log(error.message);
+
+                        if (error.errors.hasOwnProperty("name")) {
+                            errorMessage = "Saving author failed. Author name is not valid";
+                        }
+                        throw new GraphQLError(errorMessage, {
+                            extensions: {
+                            code: "BAD_USER_INPUT",
+                            },
+                        });
+                    } else {
+                        console.log(error);
+                        throw new GraphQLError(errorMessage);
+                    }
+                }
+            } else {
+                author = authorExists
+            }
+
+            const authorFound = await Author.findOne({ name: args.author });
+            const book = new Book({ ...args, author: authorFound.id });
+            let newBook;
+            
+
             try {
-                author = await Author.findOne({ name: args.author });
-
-                if (!author) author = new Author({ name: args.author });
-                await author.save();
-
-                const book = new Book({ ...args, author });
                 await book.save();
 
-                return book;
+                authorFound.books = authorFound.books.concat(book.id);
+                await authorFound.save();
+                newBook = await Book.findById(book.id).populate('author',{ name: 1, born: 1, id: 1 });                
             } catch (error) {
-                let errorMessage = "Saving book failed";
-
-                if (error instanceof mongoose.Error.ValidationError) {
-                    console.log(error.message);
-
-                    if (error.errors.hasOwnProperty("name")) {
-                        errorMessage = "Saving book failed. Author name is not valid";
-                    } else if (error.errors.hasOwnProperty("title")) {
-                        errorMessage = "Saving book failed. Book title is not valid";
-                    }
-                    throw new GraphQLError(errorMessage, {
-                        extensions: {
-                        code: "BAD_USER_INPUT",
-                        },
-                    });
-                } else {
-                    console.log(error);
-                    throw new GraphQLError(errorMessage);
-                }
+                console.log(error);
             }
+
+            await pubsub.publish('BOOK_ADDED', { bookAdded: newBook });
+            return newBook;
+
         },
         editAuthor: async (root, args) => {
             const author = await Author.findOne({ name: args.name })
@@ -158,7 +177,11 @@ const resolvers = {
             return { value: jwt.sign(userForToken, jwtSecret) }
 
         }
-    }
+    },    
+    Subscription: {
+            bookAdded: {
+                subscribe: () => pubsub.asyncIterableIterator('BOOK_ADDED')
+            }
+        }
 }
-
-module.exports = resolvers
+module.exports = resolvers  

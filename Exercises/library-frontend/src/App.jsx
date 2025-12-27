@@ -5,8 +5,7 @@ import NewBook from "./components/NewBook";
 import Recommended from "./components/Recommended";
 import Login from "./components/Login";
 import { gql} from '@apollo/client'
-import { useQuery } from '@apollo/client/react'
-
+import { useQuery, useApolloClient, useSubscription } from '@apollo/client/react'
 
 export const ALL_AUTHORS = gql`
   query {
@@ -48,20 +47,73 @@ export const ME = gql`
     }
   }
 `   
+export const BOOK_DETAILS = gql`
+  fragment BookDetails on Book {
+    title
+    published
+    author{
+      name
+      id
+      born
+      bookCount
+    }
+    id
+    genres
+  }
+`
+
+export const BOOK_ADDED = gql`
+  subscription {
+    bookAdded {
+      ...BookDetails
+    }
+  }
+  ${BOOK_DETAILS}
+`
+export const updateCache = (cache, query, addedBook) => {
+    const uniqByTitle = (a) => {
+        let seen = new Set()
+        return a.filter((item) => {
+            let k = item.title
+            return seen.has(k) ? false : seen.add(k)
+        })
+    }
+    cache.updateQuery(query, ({ allBooks }) => {
+        return {
+            allBooks: uniqByTitle(allBooks.concat(addedBook))
+        }
+    })
+}
 
 const App = () => {
     const resultAuthors = useQuery(ALL_AUTHORS);
     const resultBooks = useQuery(ALL_BOOKS);
-    const userLoggedIn = false; 
-    const client = localStorage.getItem('user-token')
+    const client = useApolloClient()
     const [token, setToken] = useState(localStorage.getItem('user-token') ?? null);
     const [page, setPage] = useState("authors");
 
     const logout = () => {
         setToken(null)
-        localStorage.clear("user-token")
+        localStorage.removeItem("user-token")
         client.resetStore()
     }
+
+    useSubscription(BOOK_ADDED, {
+        onData: ({ data, client }) => {
+            console.log('New book added via subscription', data)
+            if (!data) return
+            const addedBook = data.data.bookAdded
+            console.log('Subscription data:', addedBook)
+            try {
+                window.alert(`New book added: ${addedBook.title} by ${addedBook.author.name}`)
+                updateCache(client.cache, { query: ALL_BOOKS }, addedBook)
+            } catch (error) {
+                console.error(error)
+            }
+        },
+        onError: (err) => console.error('Subscription error', err)
+    })
+
 
    
 
@@ -72,6 +124,8 @@ const App = () => {
     if (resultAuthors.error || resultBooks.error) {
         return <div>Error: {(resultAuthors.error || resultBooks.error)?.message}</div>;
     }
+
+
 
     return (
         <div>

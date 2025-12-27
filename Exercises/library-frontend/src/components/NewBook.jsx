@@ -3,6 +3,8 @@ import { gql} from '@apollo/client'
 import { useMutation} from '@apollo/client/react'
 import { ALL_BOOKS } from '../App'
 import { ALL_AUTHORS } from '../App'
+import { updateCache } from '../App'
+
 
 const ADD_BOOK = gql`
     mutation addBook($title: String!, $author: String!, $published: Int!, $genres: [String!]!) {
@@ -33,13 +35,13 @@ const NewBook = (props) => {
 
     const [addBook] = useMutation(ADD_BOOK, {
         refetchQueries: [{ query: ALL_BOOKS }, { query: ALL_AUTHORS }],
-        awaitRefetchQueries: true,
         onError: (error) => {
-            const gqlMsg = error?.graphQLErrors?.[0]?.message
-            const netMsg = error?.networkError?.message
-            console.error('addBook error:', gqlMsg || netMsg || error.message)
-            alert(gqlMsg || netMsg || 'Add book failed')
+            console.error('addBook error:', error)
         },
+        update: (cache, response) => {
+            console.log('Updating cache with new book:', response.data.addBook)
+            updateCache(cache, { query: ALL_BOOKS }, response.data.addBook)
+        }   
     })
 
   if (!props.show) {
@@ -49,13 +51,38 @@ const NewBook = (props) => {
   const submit = async (event) => {
     event.preventDefault()
 
-    await addBook({ variables: { title, author, published: Number(published), genres } })
-        
-    setTitle('')
-    setPublished('')
-    setAuthor('')
-    setGenres([])
-    setGenre('')
+    if (!title || title.trim() === '') {
+      alert('Title is required')
+      return
+    }
+    if (!author || author.trim() === '') {
+      alert('Author is required')
+      return
+    }
+
+    const publishedInt = parseInt(published, 10)
+    if (Number.isNaN(publishedInt)) {
+      alert('Published must be a number')
+      return
+    }
+
+    try {
+      addBook({
+        variables: {
+          title: title.trim(),
+          author: author.trim(),
+          published: publishedInt,
+          genres
+        }
+      })
+      setTitle('')
+      setPublished('')
+      setAuthor('')
+      setGenres([])
+      setGenre('')
+    } catch (err) {
+      console.error('addBook caught:', err)
+    }
   }
 
   const addGenre = () => {
