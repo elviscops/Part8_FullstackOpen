@@ -31,10 +31,12 @@ mongoose.connect(MONGODB_URI)
     console.log('error connection to MongoDB:', error.message)
   })
 
+  mongoose.set('debug', true);
+
 
 const server = new ApolloServer({
-  typeDefs,
-  resolvers,
+    typeDefs,
+    resolvers,
 })
 
 // startStandaloneServer(server, {
@@ -93,7 +95,7 @@ const start = async () => {
           const token = auth.substring(7)
           const decodedToken = jwt.verify(token, process.env.JWT_SECRET)
           const currentUser = await User.findById(decodedToken.id)
-          console.log('current user:', currentUser)
+          //console.log('current user:', currentUser)
           return { currentUser }
         }
       },
